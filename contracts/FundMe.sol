@@ -1,43 +1,78 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.8;
 
+//imports
 import "./PriceConvertor.sol";
 
-error NotOwner();
+//error codes
 
+error FundMe__NotOwner();
+error FundMe__NotEnoughSent();
+
+//interface, libraries, contracts
+
+/**
+ * @title A contract for crowd funding
+ * @author Dexconv
+ * @notice this contract is to demmo sammple funding contract
+ * @dev this implements pricefeeds as our library
+ */
 contract FundMe {
+    // type declaration
     using PriceConvertor for uint256;
 
+    // state vaiables
+    mapping(address => uint256) private s_addressToAmountFunded;
     uint256 public constant MINIMUM_USD = 50 * 1e18;
+    address[] private s_funders;
+    address private immutable i_owner;
+    AggregatorV3Interface private s_priceFeed;
 
-    address[] public founders;
+    modifier onlyOwner() {
+        //require(msg.sender == iOwner, "sender is not the owner!");
+        if (msg.sender != i_owner) {
+            revert FundMe__NotOwner();
+        }
+        _;
+    }
 
-    mapping(address => uint256) public addressToAmountFunded;
+    receive() external payable {
+        fund();
+    }
 
-    address public immutable iOwner;
-
-    AggregatorV3Interface public priceFeed;
+    fallback() external payable {
+        fund();
+    }
 
     constructor(address priceFeedAddress) {
-        iOwner = msg.sender;
-        priceFeed = AggregatorV3Interface(priceFeedAddress);
+        i_owner = msg.sender;
+        s_priceFeed = AggregatorV3Interface(priceFeedAddress);
     }
 
+    /**
+     * @notice this function funds this contract
+     * @dev this implements pricefeeds as our library
+     */
     function fund() public payable {
-        require(
-            msg.value.getConversionRate(priceFeed) >= MINIMUM_USD,
+        /* require(
+            msg.value.getConversionRate(s_priceFeed) >= MINIMUM_USD,
             "not enough sent!"
-        ); //1e18 = 1eth
-        founders.push(msg.sender);
-        addressToAmountFunded[msg.sender] = msg.value;
+        ); //1e18 = 1eth */
+
+        if (msg.value.getConversionRate(s_priceFeed) <= MINIMUM_USD) {
+            revert FundMe__NotEnoughSent();
+        }
+
+        s_funders.push(msg.sender);
+        s_addressToAmountFunded[msg.sender] = msg.value;
     }
 
-    function withdraw() public onlyOwner {
-        for (uint256 i = 0; i < founders.length; i++) {
-            address founder = founders[i];
-            addressToAmountFunded[founder] = 0;
+    function withdraw() public payable onlyOwner {
+        for (uint256 i = 0; i < s_funders.length; i++) {
+            address founder = s_funders[i];
+            s_addressToAmountFunded[founder] = 0;
         }
-        founders = new address[](0);
+        s_funders = new address[](0);
 
         //withdraw the funds
 
@@ -54,19 +89,32 @@ contract FundMe {
         require(callSuccess, "call failed!");
     }
 
-    modifier onlyOwner() {
-        //require(msg.sender == iOwner, "sender is not the owner!");
-        if (msg.sender != iOwner) {
-            revert NotOwner();
+    function cheaperWithdraw() public payable onlyOwner {
+        address[] memory funders = s_funders;
+        for (uint256 i = 0; i < funders.length; i++) {
+            address founder = funders[i];
+            s_addressToAmountFunded[founder] = 0;
         }
-        _;
+        s_funders = new address[](0);
+        (bool success, ) = i_owner.call{value: address(this).balance}("");
+        require(success);
     }
 
-    receive() external payable {
-        fund();
+    function getOwner() public view returns (address) {
+        return i_owner;
     }
 
-    fallback() external payable {
-        fund();
+    function getFunders(uint256 index) public view returns (address) {
+        return s_funders[index];
+    }
+
+    function getAddressToAmountFunded(
+        address funder
+    ) public view returns (uint256) {
+        return s_addressToAmountFunded[funder];
+    }
+
+    function getPriceFeed() public view returns (AggregatorV3Interface) {
+        return s_priceFeed;
     }
 }

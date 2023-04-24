@@ -1,5 +1,6 @@
 {
   "name": "hardhat-fund-me-fcc",
+  "author": "dexconv",
   "devDependencies": {
     "@chainlink/contracts": "^0.3.1",
     "@nomicfoundation/hardhat-chai-matchers": "^1.0.0",
